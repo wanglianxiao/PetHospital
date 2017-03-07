@@ -3,7 +3,7 @@ import web
 import json
 from pymongo import *
 
-DB = MongoClient()["aaa"]
+DB = MongoClient("172.30.235.146", 27017)["aaa"]
 
 urls = (
     '/test', 'test',
