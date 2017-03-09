@@ -3,14 +3,14 @@ import web
 import json
 from pymongo import *
 
-DB = MongoClient("172.30.235.146",21017)["aaa"]
+DB = MongoClient()["aaa"]
 
 urls = (
-    '/test', 'test',
-    "/disease", "Disease",
-    "/admin", "Admin",
-    "/login", "login"
-              "/case", "Case"
+    '/test/(.*)', 'Test',
+    "/disease/(.*)", "Disease",
+    "/user/(.*)", "User",
+    "/login/(.*)", "Login",
+    "/case/(.*)", "Case"
 )
 
 
@@ -18,7 +18,7 @@ def success(data):
     return json.dumps(
         {
             "status": 200,
-            "data": data
+            "data": data,
         },
         ensure_ascii=False,
         indent=2
@@ -44,14 +44,11 @@ class BaseClass:
         self.keys = None
 
     def GET(self):
-        return self.className
+        key = web.input().get("key")
+        return self.list(key)
 
-    def POST(self):
-        operation = web.input().get("operation")
-        if operation == "list":
-            key = web.input().get("key")
-            return self.list(key)
-        elif operation == "add":
+    def POST(self, operation):
+        if operation == "add":
             return self.add()
         elif operation == "delete":
             return self.delete()
@@ -69,8 +66,8 @@ class BaseClass:
     def add(self, default={}):
         dict = default
         majorValue = web.input().get(self.majorKey)
-        if self.client.find({self.majorKey: majorValue}) is None:
-            return fail(majorValue + " already exist")
+        if self.client.find_one({self.majorKey: majorValue}) is not None:
+            return fail(majorValue + " already exists")
         if self.majorKey not in dict:
             dict[self.majorKey] = majorValue
         for key in self.keys:
@@ -104,7 +101,7 @@ class BaseClass:
             return success(self.client.delete_one({self.majorKey: value}))
 
 
-class test(BaseClass):
+class Test(BaseClass):
     def __init__(self):
         self.className = "Admin"
         self.client = DB["user"]
@@ -133,7 +130,7 @@ class Disease(BaseClass):
         self.keys = ["type"]
 
 
-class Admin(BaseClass):
+class User(BaseClass):
     def __init__(self):
         self.className = "Admin"
         self.client = DB["user"]
@@ -144,17 +141,17 @@ class Admin(BaseClass):
         return BaseClass.add(self, {"role": "internal"})
 
 
-class login:
+class Login:
     def GET(self):
         return "login"
 
     def POST(self):
-        username = web.input().get("username")
+        username = web.input().get("name")
         password = web.input().get("password")
         user = DB["user"].find_one({"name": username})
         response = {}
         if user is None:
-            return fail("用户名不存在")
+            return fail(username + " not existed")
         elif password == user["password"]:
             data = dict(user)
             data["_id"] = str(data["_id"])
