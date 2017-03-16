@@ -1,6 +1,9 @@
 # -*- coding:utf-8 -*-
 import web
 import json
+import uuid
+import datetime
+
 from pymongo import *
 
 DB = MongoClient()["aaa"]
@@ -9,10 +12,12 @@ urls = (
     '/test/(.*)', 'Test',
     "/disease/(.*)", "Disease",
     "/user/(.*)", "User",
-    "/login/(.*)", "Login",
+    "/login", "Login",
     "/case/(.*)", "Case"
 )
 
+app = web.application(urls, globals())
+session = web.session.Session(app, web.session.DiskStore('sessions'),initializer={'time':datetime.datetime.now()})
 
 def success(data):
     return json.dumps(
@@ -35,7 +40,6 @@ def fail(message):
         indent=2
     )
 
-
 class BaseClass:
     def __init__(self):
         self.className = "BaseClass"
@@ -43,17 +47,34 @@ class BaseClass:
         self.majorKey = None
         self.keys = None
 
-    def GET(self):
-        key = web.input().get("key")
-        return self.list(key)
+    def IsLogined(self):
+        # token = web.input().get("Authorization")
+        token = web.ctx.env.get('HTTP_AUTHORIZATION')
+        if token is None:
+            return False
+        elif DB["sessionid"].find_one({"sessionid": token}):
+            return True
+        else:
+            return False
+
+    def GET(self, uri):
+        if self.IsLogined():
+            wtf = uri.encode("UTF-8")
+            query = {}
+            for st in wtf.split("&"):
+                if "=" in st:
+                    s = st.split("=")
+                    query[s[0]] = s[1]
+            return self.list(query)
 
     def POST(self, operation):
-        if operation == "add":
-            return self.add()
-        elif operation == "delete":
-            return self.delete()
-        elif operation == "update":
-            return self.update()
+        if self.IsLogined():
+            if operation == "add":
+                return self.add()
+            elif operation == "delete":
+                return self.delete()
+            elif operation == "update":
+                return self.update()
 
     def list(self, key=None):
         List = []
@@ -114,13 +135,12 @@ class Test(BaseClass):
     def POST(self):
         return "POST"
 
-
 class Case:
     def __init__(self):
         self.client = DB["case"]
         self.className = "Case"
-        self.majorKey = ""
-
+        self.majorKey = "name"
+        self.keys = ["disease_name", "received", "result", "treatment"]
 
 class Disease(BaseClass):
     def __init__(self):
@@ -140,26 +160,49 @@ class User(BaseClass):
     def add(self):
         return BaseClass.add(self, {"role": "internal"})
 
-
 class Login:
     def GET(self):
         return "login"
 
     def POST(self):
+
         username = web.input().get("name")
         password = web.input().get("password")
         user = DB["user"].find_one({"name": username})
-        response = {}
         if user is None:
             return fail(username + " not existed")
         elif password == user["password"]:
             data = dict(user)
             data["_id"] = str(data["_id"])
+
+            session.logged_in = True
+            session.user = user
+            session.sessionid = str(uuid.uuid1())
+
+            DB["sessionid"].insert({"sessionid": session.sessionid, "user": session.user})
+            data["session_id"] = session.sessionid
             return success(data)
         else:
             return fail("密码错误")
 
-
 if __name__ == "__main__":
     app = web.application(urls, globals())
     app.run()
+
+
+
+    # session.time = datetime.datetime.now()
+    # data["session_time "] = str(session.time)
+    # last_login = web.cookies().get('time')
+    # last_login_data = str(time.asctime( time.localtime(time.time()) ))
+
+    # if session._config["cookie_name"] is None:
+    #     web.config.session_parameters['cookie_name'] = uuid.uuid1()
+    #     data["session_id"] = str(web.config.session_parameters['cookie_name'])
+    #     DB["sessionid"].insert({"sessionid": data["session_id"], "user": session.login })
+    # else:
+    #     sessionid = DB["sessionid"].find_one({"user": username})
+    #     if session._config["cookie_name"] == DB["sessionid"].find_one({"user": username}):
+    #         return success(data)
+    #     else:
+    #         return fail("session expired")

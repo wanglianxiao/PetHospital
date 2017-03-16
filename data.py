@@ -6,6 +6,7 @@ import random
 import os
 client = MongoClient()["aaa"]
 
+
 def department():
     client["department"].drop()
     dict = [
