@@ -3,7 +3,6 @@ import web
 import json
 import uuid
 import datetime
-
 from pymongo import *
 
 DB = MongoClient()["aaa"]
@@ -18,6 +17,7 @@ urls = (
 
 app = web.application(urls, globals())
 session = web.session.Session(app, web.session.DiskStore('sessions'),initializer={'time':datetime.datetime.now()})
+
 
 def success(data):
     return json.dumps(
@@ -48,7 +48,6 @@ class BaseClass:
         self.keys = None
 
     def IsLogined(self):
-        # token = web.input().get("Authorization")
         token = web.ctx.env.get('HTTP_AUTHORIZATION')
         if token is None:
             return False
@@ -165,7 +164,6 @@ class Login:
         return "login"
 
     def POST(self):
-
         username = web.input().get("name")
         password = web.input().get("password")
         user = DB["user"].find_one({"name": username})
@@ -174,13 +172,10 @@ class Login:
         elif password == user["password"]:
             data = dict(user)
             data["_id"] = str(data["_id"])
-
-            session.logged_in = True
             session.user = user
             session.sessionid = str(uuid.uuid1())
-
             DB["sessionid"].insert({"sessionid": session.sessionid, "user": session.user})
-            data["session_id"] = session.sessionid
+            data["token"] = session.sessionid
             return success(data)
         else:
             return fail("密码错误")
@@ -188,6 +183,8 @@ class Login:
 if __name__ == "__main__":
     app = web.application(urls, globals())
     app.run()
+
+
 
 
 
