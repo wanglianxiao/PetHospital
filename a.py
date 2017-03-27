@@ -10,16 +10,14 @@ from bson.objectid import ObjectId
 DB = MongoClient()["aaa"]
 
 urls = (
-    '/test/(.*?)', 'Test',
-    "/department", "Department",
-    "/department/(.*?)", "Department",
+    '/test/(.*)', 'Test',
     "/disease", "Disease",
-    "/disease/(.*?)", "Disease",
+    "/disease/(.*)", "Disease",
     "/user", "User",
-    "/user/(.*?)", "User",
+    "/user/(.*)", "User",
     "/case", "Case",
-    "/case/(.*?)", "Case",
-    "/case/(.*?)/(.*?)", "Case",
+    "/case/(.*)/(.*)", "Case",
+    "/case/(.*)", "Case",
     "/login", "Login",
     "/logout", "Logout",
     "/test_img", "TestImg"
@@ -90,7 +88,7 @@ class BaseClass:
                     query[item] = str(web.input()[item])
         return self.list(query, distinct)
 
-    def POST(self, operation, param2 = None):
+    def POST(self, operation):
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -105,7 +103,6 @@ class BaseClass:
             return self.delete(request)
         elif operation == "update":
             return self.update(request)
-
 
     def OPTIONS(self, value = None, value2 = None):
         web.header("Access-Control-Allow-Origin", "*")
@@ -125,13 +122,15 @@ class BaseClass:
         else:
             return success(self.client.find(key).distinct(Distinct))
 
-    def add(self, request, default={}, image=[]):
+    def add(self, request, default={}):
         dict = default
         _id = request.get("id")
         if self.client.find_one({"_id": ObjectId(_id)}) is not None:
             return fail(_id + " already exists")
 
         for key in self.keys:
+            if key in dict:
+                continue
             value = request.get(key)
             dict[key] = value
         return success(json.dumps({"id": str(self.client.insert_one(dict).inserted_id)}))
@@ -155,6 +154,7 @@ class BaseClass:
         else:
             return success(self.client.delete_one({self.majorKey: value}))
 
+
 # class Test():
 #
 #     def GET(self):
@@ -164,18 +164,12 @@ class BaseClass:
 #         return "POST"
 
 
-class Department(BaseClass):
-    def __init__(self):
-        self.client = DB["department"]
-        self.className = "Department"
-        self.keys = ["department", "function", "manager"]
-
 class Case(BaseClass):
     def __init__(self):
         self.client = DB["case"]
         self.className = "Case"
         #self.majorKey = "name"
-        self.keys = ["name", "disease_name", "received", "result", "treatment", "image"]
+        self.keys = ["name", "disease_name", "received", "result", "treatment"]
 
     def list(self, key=None, Distinct=None):
         if Distinct is None:
@@ -191,9 +185,7 @@ class Case(BaseClass):
         else:
             return success(self.client.find(key).distinct(Distinct))
 
-    def POST(self, treatment, operation = None):
-        if operation is None:
-            return BaseClass.POST(self, treatment, None)
+    def POST(self, treatment, operation):
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -205,7 +197,6 @@ class Case(BaseClass):
         request = dict(web.input())
         if operation == "add":
             return self.treatment_add(request)
-        return fail("WTF")
 
     def treatment_add(self, request):
         _id = request["id"]
@@ -235,6 +226,7 @@ class Case(BaseClass):
             return success(L)#success(self.client.find_one({"_id": ObjectId(_id)})["treatment"])
         else:
             return fail(_id + " not exists")
+
 
 class Disease(BaseClass):
     def __init__(self):
