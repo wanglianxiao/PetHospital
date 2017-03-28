@@ -7,6 +7,7 @@ import time
 import datetime
 import re
 import base64
+import copy
 from azure.storage.blob import ContentSettings
 from pymongo import *
 from bson.objectid import ObjectId
@@ -24,8 +25,8 @@ urls = (
     "/user", "User",
     "/user/(.*?)", "User",
     "/case", "Case",
-    "/case/(.*?)", "Case",
     "/case/(.*?)/(.*?)", "Case",
+    "/case/(.*?)", "Case",
     "/login", "Login",
     "/logout", "Logout",
     "/test_img", "TestImg"
@@ -149,13 +150,15 @@ class BaseClass:
         return imgname
 
     def add(self, request, default={}):
-        dict = default
+        dict = copy.deepcopy(default)
         _id = request.get("id")
         if self.client.find_one({"_id": ObjectId(_id)}) is not None:
             return fail(_id + " already exists")
 
         for key in self.keys:
             value = request.get(key)
+            if value is None and key in dict:
+                continue
             if key == "image":
                 dict[key] = imgPath + self.base64ToImage(value)
             else:
@@ -244,7 +247,6 @@ class Case(BaseClass):
         collection = self.client.find_one({"_id": ObjectId(_id)})
         if collection:
             now = time.strftime('%Y/%m/%d',time.localtime(time.time()))
-            contents = collection["treatment"]
             self.client.update_one(
                 {
                     "_id": ObjectId(_id)
@@ -267,11 +269,14 @@ class Case(BaseClass):
         else:
             return fail(_id + " not exists")
 
+    def add(self, request):
+        return BaseClass.add(self, request, {"treatment": []})
+
 class Disease(BaseClass):
     def __init__(self):
         self.client = DB["disease"]
         self.className = "Disease"
-        self.keys = ["disease", "type", "introduction"]
+        self.keys = ["disease", "image", "type", "introduction"]
 
 class User(BaseClass):
     def __init__(self):
