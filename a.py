@@ -225,9 +225,9 @@ class Case(BaseClass):
         else:
             return success(self.client.find(key).distinct(Distinct))
 
-    def POST(self, treatment, operation = None):
+    def POST(self, param, operation = None):
         if operation is None:
-            return BaseClass.POST(self, treatment, None)
+            return BaseClass.POST(self, param, None)
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -238,10 +238,10 @@ class Case(BaseClass):
         # nanshou = web.ctx.env.get("HTTP_ACCEPT")
         request = dict(web.input())
         if operation == "add":
-            return self.treatment_add(request)
+            return self.treatment_add(param, request)
         return fail("WTF")
 
-    def treatment_add(self, request):
+    def treatment_add(self, param, request):
         _id = request["id"]
         content = request["content"]
         collection = self.client.find_one({"_id": ObjectId(_id)})
@@ -253,7 +253,7 @@ class Case(BaseClass):
                 },
                 {
                     "$push": {
-                        "treatment": {
+                        param: {
                             "date": now,
                             "content": content,
                             "timestamp": time.time()
@@ -263,7 +263,7 @@ class Case(BaseClass):
             #L = []
             #for item in self.client.find_one({"_id": ObjectId(_id)})["treatment"]:
             #    L.insert(0, item)
-            L = self.client.find_one({"_id": ObjectId(_id)})["treatment"]
+            L = self.client.find_one({"_id": ObjectId(_id)})[param]
             L.sort(key=lambda x:x["timestamp"],reverse=True)
             return success(L)#success(self.client.find_one({"_id": ObjectId(_id)})["treatment"])
         else:
