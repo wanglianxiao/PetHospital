@@ -219,6 +219,8 @@ class Case(BaseClass):
                 del (data["_id"])
                 if data["treatment"] is not None:
                     data["treatment"].sort(key=lambda x:x["timestamp"],reverse=True)
+                if data["result"] is not None:
+                    data["result"].sort(key=lambda x:x["timestamp"],reverse=True)
                 #sortedtreatment = sorted(data["treatment"].iteritems(), key=lambda d:d[1]["timestamp"])
                 List.append(data)
             return success(List)
