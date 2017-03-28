@@ -5,19 +5,28 @@ import web
 import json
 import time
 import datetime
+import re
+import base64
+import copy
+from azure.storage.blob import ContentSettings
 from pymongo import *
 from bson.objectid import ObjectId
+from azure.storage.blob import BlockBlobService
+
 DB = MongoClient()["aaa"]
+block_blob_service = BlockBlobService(account_name='wangpiaoliang', account_key='cp9hQ73nKEmVv3RxPynT+Z3AvlvRLjw84GHh+FgkMjgfKv+rG+mHn65ZDLT3BxdhQZnQkoU/KtgWCxs2P1wvmQ==')
 
 urls = (
-    '/test/(.*)', 'Test',
+    '/test/(.*?)', 'Test',
+    "/department", "Department",
+    "/department/(.*?)", "Department",
     "/disease", "Disease",
-    "/disease/(.*)", "Disease",
+    "/disease/(.*?)", "Disease",
     "/user", "User",
-    "/user/(.*)", "User",
+    "/user/(.*?)", "User",
     "/case", "Case",
-    "/case/(.*)/(.*)", "Case",
-    "/case/(.*)", "Case",
+    "/case/(.*?)/(.*?)", "Case",
+    "/case/(.*?)", "Case",
     "/login", "Login",
     "/logout", "Logout",
     "/test_img", "TestImg"
@@ -25,7 +34,7 @@ urls = (
 
 app = web.application(urls, globals())
 session = web.session.Session(app, web.session.DiskStore('sessions'), initializer={'time': datetime.datetime.now()})
-
+imgPath = "https://wangpiaoliang.blob.core.windows.net/mei/"
 
 def success(data):
     print("200")
@@ -88,7 +97,7 @@ class BaseClass:
                     query[item] = str(web.input()[item])
         return self.list(query, distinct)
 
-    def POST(self, operation):
+    def POST(self, operation, param2 = None):
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -103,6 +112,7 @@ class BaseClass:
             return self.delete(request)
         elif operation == "update":
             return self.update(request)
+
 
     def OPTIONS(self, value = None, value2 = None):
         web.header("Access-Control-Allow-Origin", "*")
@@ -122,17 +132,37 @@ class BaseClass:
         else:
             return success(self.client.find(key).distinct(Distinct))
 
+    def base64ToImage(self, image):
+        input = re.sub(r"<img ng-src=\"", '', str(image))
+        print(input)
+        input = re.sub(r"data:image\/(png|gif|jpeg);base64,", '', input)
+        print(input)
+        input = re.sub(r"\">", '', input)
+        print(input)
+        imgdata = base64.b64decode(input)
+        imgname = str(time.time()).replace('.', '') + '.jpg'
+        block_blob_service.create_blob_from_bytes(
+            'mei',
+            imgname,
+            imgdata,
+            content_settings=ContentSettings(content_type='image/jpeg')
+        )
+        return imgname
+
     def add(self, request, default={}):
-        dict = default
+        dict = copy.deepcopy(default)
         _id = request.get("id")
         if self.client.find_one({"_id": ObjectId(_id)}) is not None:
             return fail(_id + " already exists")
 
         for key in self.keys:
-            if key in dict:
-                continue
             value = request.get(key)
-            dict[key] = value
+            if value is None and key in dict:
+                continue
+            if key == "image":
+                dict[key] = imgPath + self.base64ToImage(value)
+            else:
+                dict[key] = value
         return success(json.dumps({"id": str(self.client.insert_one(dict).inserted_id)}))
 
     def update(self, request):
@@ -144,7 +174,10 @@ class BaseClass:
         D = {}
         for key in self.keys:
             value = request.get("new_" + key)
-            D[key] = value
+            if key == "image":
+                D[key] = imgPath + self.base64ToImage(value)
+            else:
+                D[key] = value
         return success(self.client.update({"_id": ObjectId(_id)}, {"$set": D}))
 
     def delete(self, request):
@@ -164,12 +197,18 @@ class BaseClass:
 #         return "POST"
 
 
+class Department(BaseClass):
+    def __init__(self):
+        self.client = DB["department"]
+        self.className = "Department"
+        self.keys = ["department", "function", "manager"]
+
 class Case(BaseClass):
     def __init__(self):
         self.client = DB["case"]
         self.className = "Case"
         #self.majorKey = "name"
-        self.keys = ["name", "disease_name", "received", "result", "treatment"]
+        self.keys = ["name", "disease_name", "received", "result", "treatment", "image"]
 
     def list(self, key=None, Distinct=None):
         if Distinct is None:
@@ -178,14 +217,17 @@ class Case(BaseClass):
                 data = dict(item)
                 data["id"] = str(data["_id"])
                 del (data["_id"])
-                data["treatment"].sort(key=lambda x:x["timestamp"],reverse=True)
+                if data["treatment"] is not None:
+                    data["treatment"].sort(key=lambda x:x["timestamp"],reverse=True)
                 #sortedtreatment = sorted(data["treatment"].iteritems(), key=lambda d:d[1]["timestamp"])
                 List.append(data)
             return success(List)
         else:
             return success(self.client.find(key).distinct(Distinct))
 
-    def POST(self, treatment, operation):
+    def POST(self, treatment, operation = None):
+        if operation is None:
+            return BaseClass.POST(self, treatment, None)
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -197,6 +239,7 @@ class Case(BaseClass):
         request = dict(web.input())
         if operation == "add":
             return self.treatment_add(request)
+        return fail("WTF")
 
     def treatment_add(self, request):
         _id = request["id"]
@@ -204,7 +247,6 @@ class Case(BaseClass):
         collection = self.client.find_one({"_id": ObjectId(_id)})
         if collection:
             now = time.strftime('%Y/%m/%d',time.localtime(time.time()))
-            contents = collection["treatment"]
             self.client.update_one(
                 {
                     "_id": ObjectId(_id)
@@ -227,12 +269,14 @@ class Case(BaseClass):
         else:
             return fail(_id + " not exists")
 
+    def add(self, request):
+        return BaseClass.add(self, request, {"treatment": []})
 
 class Disease(BaseClass):
     def __init__(self):
         self.client = DB["disease"]
         self.className = "Disease"
-        self.keys = ["disease", "type", "introduction"]
+        self.keys = ["disease", "image", "type", "introduction"]
 
 class User(BaseClass):
     def __init__(self):
