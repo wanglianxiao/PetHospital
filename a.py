@@ -7,12 +7,13 @@ import time
 import datetime
 import re
 import base64
+import copy
 from azure.storage.blob import ContentSettings
 from pymongo import *
 from bson.objectid import ObjectId
 from azure.storage.blob import BlockBlobService
 
-DB = MongoClient()["aaa"]
+DB = MongoClient()["pet"]
 block_blob_service = BlockBlobService(account_name='wangpiaoliang', account_key='cp9hQ73nKEmVv3RxPynT+Z3AvlvRLjw84GHh+FgkMjgfKv+rG+mHn65ZDLT3BxdhQZnQkoU/KtgWCxs2P1wvmQ==')
 
 urls = (
@@ -24,8 +25,8 @@ urls = (
     "/user", "User",
     "/user/(.*?)", "User",
     "/case", "Case",
-    "/case/(.*?)", "Case",
     "/case/(.*?)/(.*?)", "Case",
+    "/case/(.*?)", "Case",
     "/login", "Login",
     "/logout", "Logout",
     "/test_img", "TestImg"
@@ -149,13 +150,15 @@ class BaseClass:
         return imgname
 
     def add(self, request, default={}):
-        dict = default
+        dict = copy.deepcopy(default)
         _id = request.get("id")
         if self.client.find_one({"_id": ObjectId(_id)}) is not None:
             return fail(_id + " already exists")
 
         for key in self.keys:
             value = request.get(key)
+            if value is None and key in dict:
+                continue
             if key == "image":
                 dict[key] = imgPath + self.base64ToImage(value)
             else:
@@ -216,15 +219,17 @@ class Case(BaseClass):
                 del (data["_id"])
                 if data["treatment"] is not None:
                     data["treatment"].sort(key=lambda x:x["timestamp"],reverse=True)
+                if data["result"] is not None:
+                    data["result"].sort(key=lambda x:x["timestamp"],reverse=True)
                 #sortedtreatment = sorted(data["treatment"].iteritems(), key=lambda d:d[1]["timestamp"])
                 List.append(data)
             return success(List)
         else:
             return success(self.client.find(key).distinct(Distinct))
 
-    def POST(self, treatment, operation = None):
+    def POST(self, param, operation = None):
         if operation is None:
-            return BaseClass.POST(self, treatment, None)
+            return BaseClass.POST(self, param, None)
         web.header("Access-Control-Allow-Origin", "*")
         web.header("Access-Control-Request-Headers", "*")
         web.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
@@ -235,23 +240,22 @@ class Case(BaseClass):
         # nanshou = web.ctx.env.get("HTTP_ACCEPT")
         request = dict(web.input())
         if operation == "add":
-            return self.treatment_add(request)
+            return self.treatment_add(param, request)
         return fail("WTF")
 
-    def treatment_add(self, request):
+    def treatment_add(self, param, request):
         _id = request["id"]
         content = request["content"]
         collection = self.client.find_one({"_id": ObjectId(_id)})
         if collection:
             now = time.strftime('%Y/%m/%d',time.localtime(time.time()))
-            contents = collection["treatment"]
             self.client.update_one(
                 {
                     "_id": ObjectId(_id)
                 },
                 {
                     "$push": {
-                        "treatment": {
+                        param: {
                             "date": now,
                             "content": content,
                             "timestamp": time.time()
@@ -261,17 +265,20 @@ class Case(BaseClass):
             #L = []
             #for item in self.client.find_one({"_id": ObjectId(_id)})["treatment"]:
             #    L.insert(0, item)
-            L = self.client.find_one({"_id": ObjectId(_id)})["treatment"]
+            L = self.client.find_one({"_id": ObjectId(_id)})[param]
             L.sort(key=lambda x:x["timestamp"],reverse=True)
             return success(L)#success(self.client.find_one({"_id": ObjectId(_id)})["treatment"])
         else:
             return fail(_id + " not exists")
 
+    def add(self, request):
+        return BaseClass.add(self, request, {"treatment": []})
+
 class Disease(BaseClass):
     def __init__(self):
         self.client = DB["disease"]
         self.className = "Disease"
-        self.keys = ["disease", "type", "introduction"]
+        self.keys = ["disease", "image", "type", "introduction"]
 
 class User(BaseClass):
     def __init__(self):
