@@ -272,7 +272,7 @@ class Case(BaseClass):
             return fail(_id + " not exists")
 
     def add(self, request):
-        return BaseClass.add(self, request, {"treatment": []})
+        return BaseClass.add(self, request, {"treatment": [], "result": []})
 
 class Disease(BaseClass):
     def __init__(self):
