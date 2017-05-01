@@ -1,4 +1,4 @@
 # PetHospital
- Two branches:
-  Master for deploy
-  Develop for dev
+Two branches:\
+  master for deploy;\
+  develop for dev
